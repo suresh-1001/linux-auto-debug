@@ -80,4 +80,4 @@ Host: demo-vm   |   Time: 2025-09-29T20:30:00Z
 ---
 
 ## 📜 License
-MIT License
+This project is licensed under the [MIT License](./LICENSE).
