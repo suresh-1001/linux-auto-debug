@@ -75,7 +75,6 @@ Host: demo-vm   |   Time: 2025-09-29T20:30:00Z
 - Showcases **hands-on Linux troubleshooting** skills.
 - Demonstrates **automation + prevention mindset**.
 - Works across **Ubuntu 24.04** and **AlmaLinux 10** (two common enterprise distros).
-- Great for interviews and portfolio.
 
 ---
 
