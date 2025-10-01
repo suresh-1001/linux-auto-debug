@@ -18,7 +18,8 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       cat <<'EOF'
 Usage: linux-autodebug.sh [--apply] [--aggressive] [--report <file>]
-  --apply       Perform safe remediations (journals vacuum, logrotate, restart failed services, fix DNS fallback, clear pkg caches, time sync)
+  --apply       Perform safe remediations (journals vacuum, logrotate, restart failed services,
+                fix DNS fallback, clear pkg caches, time sync)
   --aggressive  Also restart processes holding deleted files (may bounce daemons)
   --report      Save a full report to this path
 EOF
@@ -36,8 +37,65 @@ fi
 log() { echo "[$(date +'%H:%M:%S')] $*"; }
 hr()  { printf -- "----------------------------------------------\n"; }
 need_root() { if [[ "$APPLY" == true && $EUID -ne 0 ]]; then echo "Please run with sudo for --apply"; exit 1; fi; }
-run_safe() { # run a cmd and ignore failure, print error
-  bash -c "$1" || log "WARN: '$1' failed (continuing)"
+run_safe() { bash -c "$1" || log "WARN: '$1' failed (continuing)"; }
+
+# ===============================
+# Final Summary - function
+# ===============================
+final_summary() {
+  echo
+  echo "============================================================"
+  echo "[Final Summary - Plain English]"
+
+  # System Load (no bc dependency)
+  LOAD=$(uptime | awk -F'load average: ' '{print $2}' | cut -d, -f1 | tr -d ' ')
+  if awk "BEGIN {exit !($LOAD > 2.0)}"; then
+    echo "- ⚠️ System load is high ($LOAD). Investigate CPU-intensive processes."
+  else
+    echo "- ✅ System load is normal ($LOAD)."
+  fi
+
+  # Memory
+  AVAIL=$(free -m | awk '/Mem:/ {print $7}')
+  if [ -n "$AVAIL" ] && [ "$AVAIL" -lt 200 ]; then
+    echo "- ⚠️ Low memory available (${AVAIL}MB). Consider adding RAM or stopping apps."
+  else
+    echo "- ✅ Memory is healthy (${AVAIL:-unknown}MB available)."
+  fi
+
+  # Disk
+  ROOTUSE=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+  if [ -n "$ROOTUSE" ] && [ "$ROOTUSE" -gt 85 ]; then
+    echo "- ⚠️ Root filesystem is ${ROOTUSE}% full. Free up space soon."
+  else
+    echo "- ✅ Disk usage is safe (Root ${ROOTUSE:-?}% full)."
+  fi
+
+  # Logs check
+  if command -v journalctl >/dev/null 2>&1 && journalctl -p 3 -n 20 --no-pager | grep -q "I/O error"; then
+    echo "- ⚠️ Kernel is logging I/O errors (often phantom floppy/CD in VMs)."
+  else
+    echo "- ✅ No critical kernel I/O errors detected."
+  fi
+
+  # Failed services
+  FAILED_CNT=$(systemctl --failed --no-legend --type=service 2>/dev/null | wc -l || echo 0)
+  if [ "$FAILED_CNT" -gt 0 ]; then
+    echo "- ⚠️ $FAILED_CNT services are failed. Run 'systemctl --failed' to review."
+  else
+    echo "- ✅ All systemd services are running normally."
+  fi
+
+  # Time sync
+  if command -v timedatectl >/dev/null 2>&1 && timedatectl show 2>/dev/null | grep -q 'NTPSynchronized=yes'; then
+    echo "- ✅ System clock is synchronized via NTP."
+  else
+    echo "- ⚠️ System clock is NOT synchronized. Check NTP."
+  fi
+
+  echo
+  echo "[Verdict] Overall system health looks stable unless flagged above."
+  echo "============================================================"
 }
 
 log "=== Linux Auto-Debug + Self-Heal ==="
@@ -87,14 +145,21 @@ fi
 log "[System] Uptime / Load"
 uptime || true
 echo
+echo "[Explanation] Shows how long the system has been running, logged-in users, and load average. Near 0 = idle."
+hr
+
 log "[System] CPU/Memory top offenders"
 ps aux --sort=-%cpu | head -n 8
 echo
 ps aux --sort=-%mem | head -n 8
+echo
+echo "[Explanation] Processes using most CPU and RAM. Use to spot runaway tasks."
 hr
 
 log "[Memory] free -h"
 free -h || true
+echo
+echo "[Explanation] Total/used/available memory. Very low 'available' can cause swapping or slowdowns."
 hr
 
 log "[Disk] Filesystems (df -hT)"
@@ -110,6 +175,8 @@ while read -r fs type size used avail usep mount; do
     ((DISK_ALERTS++))
   fi
 done < <(df -hPT | awk 'NR>1 {print $1,$2,$3,$4,$5,$6,$7}')
+echo
+echo "[Explanation] Disk usage by filesystem. Alerts if any mount exceeds 85%."
 hr
 
 log "[Network] Interfaces"
@@ -120,6 +187,8 @@ ip route || true
 echo
 log "[Network] Open ports (top 15)"
 ss -tulnp 2>/dev/null | head -n 15 || true
+echo
+echo "[Explanation] Interfaces, routing, and listening ports. Keep the open-port list minimal for security."
 hr
 
 # -------- Services --------
@@ -133,6 +202,8 @@ if [[ -n "$FAILED_UNITS" ]]; then
 else
   echo "None"
 fi
+echo
+echo "[Explanation] Active services and any failures. Failed units often explain app outages."
 hr
 
 # -------- Logs --------
@@ -145,6 +216,8 @@ if [[ -f "$SYSLOG_FILE" ]]; then
   log "[Logs] Tail $SYSLOG_FILE (errors/warnings)"
   tail -n 200 "$SYSLOG_FILE" | grep -Ei "error|warn|fail" | tail -n 40 || true
 fi
+echo
+echo "[Explanation] Recent system errors/warnings. Common harmless VM messages: floppy/CD I/O, SMBus notices."
 hr
 
 # -------- DNS quick sanity --------
@@ -159,6 +232,8 @@ else
   DNS_ALERT=true
   log "ALERT: No valid nameserver lines found in $RESOLV"
 fi
+echo
+echo "[Explanation] DNS configuration. Missing nameserver lines can break name resolution."
 hr
 
 # -------- Time sync --------
@@ -170,6 +245,8 @@ if command -v timedatectl >/dev/null 2>&1; then
     TIME_ALERT=true
     log "ALERT: NTP not synchronized"
   fi
+  echo
+  echo "[Explanation] Time source and NTP sync. Accurate time is critical for auth/logs."
   hr
 fi
 
@@ -180,6 +257,8 @@ if command -v getenforce >/dev/null 2>&1; then
   if [[ "$SEL" == "Enforcing" ]]; then
     log "Tip: If a service starts then fails, check /var/log/audit/audit.log for denials."
   fi
+  echo
+  echo "[Explanation] SELinux mode (Enforcing/Permissive/Disabled). Denials can block services."
   hr
 fi
 
@@ -189,6 +268,8 @@ du -xhd1 /var 2>/dev/null | sort -h | tail -n 10 || true
 echo
 log "[Disk] Biggest logs in /var/log (top 10)"
 du -sh /var/log/* 2>/dev/null | sort -h | tail -n 10 || true
+echo
+echo "[Explanation] Space hotspots under /var and /var/log. Useful when disks fill up."
 hr
 
 # -------- Deleted-but-open files (leaking space) --------
@@ -205,6 +286,8 @@ if command -v lsof >/dev/null 2>&1; then
 else
   echo "lsof not installed"
 fi
+echo
+echo "[Explanation] Deleted files still open keep consuming space until the process restarts."
 hr
 
 # =====================================================================
@@ -213,6 +296,7 @@ hr
 need_root
 
 if ! $APPLY; then
+  final_summary
   log "Read-only run complete. Re-run with --apply for safe fixes."
   exit 0
 fi
@@ -256,7 +340,6 @@ fi
 # Truncate single huge logs (>300MB) cautiously
 log "[Fix] Truncating very large logs (>300MB) under /var/log"
 while read -r size path; do
-  # human size like 1.1G -> convert rough threshold check by suffix
   num=${size%[KMG]}
   unit=${size##*$num}
   over=false
@@ -299,12 +382,10 @@ hr
 # 4) DNS fallback if no valid resolvers
 if $DNS_ALERT; then
   log "[Fix] Adding safe DNS fallback"
-  # Prefer systemd-resolved if active
   if systemctl is-active --quiet systemd-resolved; then
     run_safe "resolvectl dns $(hostname -I | awk '{print $1}') 1.1.1.1 8.8.8.8"
     log "Set DNS via systemd-resolved (added 1.1.1.1, 8.8.8.8 as fallback)"
   else
-    # simple append (preserve existing file)
     cp -a "$RESOLV" "${RESOLV}.bak.$(date +%s)" || true
     {
       echo "nameserver 1.1.1.1"
@@ -344,3 +425,4 @@ fi
 hr
 
 log "=== Done. Apply mode completed at $(date -u +'%Y-%m-%dT%H:%M:%SZ') ==="
+final_summary
