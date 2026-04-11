@@ -36,7 +36,6 @@ fi
 
 log() { echo "[$(date +'%H:%M:%S')] $*"; }
 hr()  { printf -- "----------------------------------------------\n"; }
-need_root() { if [[ "$APPLY" == true && $EUID -ne 0 ]]; then echo "Please run with sudo for --apply"; exit 1; fi; }
 run_safe() { bash -c "$1" || log "WARN: '$1' failed (continuing)"; }
 
 # ===============================
@@ -98,6 +97,14 @@ final_summary() {
   echo "============================================================"
 }
 
+# ===============================
+# Root check — fail fast if --apply is set and not root
+# ===============================
+if [[ "$APPLY" == true && $EUID -ne 0 ]]; then
+  echo "ERROR: --apply requires root. Re-run with sudo."
+  exit 1
+fi
+
 log "=== Linux Auto-Debug + Self-Heal ==="
 log "Host: $(hostname -f 2>/dev/null || hostname)  |  Time (UTC): $START_TS"
 hr
@@ -142,6 +149,10 @@ else
 fi
 
 # -------- Baseline Health --------
+# Note: run_safe uses '|| true' throughout to prevent set -e from aborting on
+# non-critical check failures. The strict mode still catches unbound variables
+# and pipeline errors in the main script flow.
+
 log "[System] Uptime / Load"
 uptime || true
 echo
@@ -225,9 +236,8 @@ RESOLV="/etc/resolv.conf"
 DNS_ALERT=false
 log "[DNS] resolv.conf"
 head -n 10 "$RESOLV" || true
-VALID_DNS=false
 if grep -Eq '^\s*nameserver\s+[0-9a-fA-F:.]+' "$RESOLV"; then
-  VALID_DNS=true
+  : # resolv.conf looks healthy
 else
   DNS_ALERT=true
   log "ALERT: No valid nameserver lines found in $RESOLV"
@@ -293,11 +303,10 @@ hr
 # =====================================================================
 #                          REMEDIATIONS
 # =====================================================================
-need_root
 
 if ! $APPLY; then
   final_summary
-  log "Read-only run complete. Re-run with --apply for safe fixes."
+  log "Read-only run complete. Re-run with sudo ./linux-autodebug.sh --apply for safe fixes."
   exit 0
 fi
 
