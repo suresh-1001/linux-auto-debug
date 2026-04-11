@@ -6,6 +6,7 @@ A portable Bash script built for real-world production servers. It detects the O
 
 Used to diagnose and stabilize Linux servers across cloud and on-prem environments in Bay Area SMB and enterprise settings.
 
+![Linux Auto Debug](./image/linux-auto-debug.webp)
 ---
 
 ## Quick Run (Read-Only, No Install)
