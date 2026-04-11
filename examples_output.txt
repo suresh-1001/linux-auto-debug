@@ -1,0 +1,218 @@
+# Sample run: sudo ./linux-autodebug.sh --apply --report /root/health-report-2025-09-29.txt
+# Host: prod-web-01 | Ubuntu 22.04 LTS | 4 vCPU | 8GB RAM
+
+[20:30:01] === Linux Auto-Debug + Self-Heal ===
+[20:30:01] Host: prod-web-01.example.internal  |  Time (UTC): 2025-09-29T20:30:01Z
+----------------------------------------------
+[20:30:01] Detected OS: Ubuntu 22.04.4 LTS  |  Kernel: 5.15.0-119-generic
+----------------------------------------------
+[20:30:01] [System] Uptime / Load
+ 20:30:01 up 12 days,  4:11,  1 user,  load average: 0.08, 0.11, 0.09
+
+[Explanation] Shows how long the system has been running, logged-in users, and load average. Near 0 = idle.
+----------------------------------------------
+[20:30:01] [System] CPU/Memory top offenders
+USER       PID  %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+www-data  1842   2.1  3.4 412836 27648 ?        S    Sep27  14:21 php-fpm: pool www
+mysql     1204   1.8  8.2 1823904 66112 ?       Sl   Sep17  61:08 /usr/sbin/mysqld
+root       988   0.4  0.6  72448  5120 ?        Ss   Sep17   5:14 /usr/sbin/sshd
+www-data  2011   0.3  2.8 409600 22528 ?        S    Sep28   2:44 php-fpm: pool www
+root       412   0.1  0.3  18432  2816 ?        Ss   Sep17   1:02 /lib/systemd/systemd-journald
+root         1   0.0  0.2  20480  1792 ?        Ss   Sep17   0:33 /sbin/init splash
+postfix    874   0.0  0.2  62464  1920 ?        S    Sep17   0:04 pickup -l -t unix -u
+chronyd    521   0.0  0.1  12288  1024 ?        S    Sep17   0:08 /usr/sbin/chronyd
+
+USER       PID  %CPU %MEM    VSZ    RSS TTY      STAT START   TIME COMMAND
+mysql     1204   1.8  8.2 1823904 66112 ?       Sl   Sep17  61:08 /usr/sbin/mysqld
+www-data  1842   2.1  3.4 412836 27648 ?        S    Sep27  14:21 php-fpm: pool www
+www-data  2011   0.3  2.8 409600 22528 ?        S    Sep28   2:44 php-fpm: pool www
+root       988   0.4  0.6  72448  5120 ?        Ss   Sep17   0:33 /usr/sbin/sshd
+root         1   0.0  0.2  20480  1792 ?        Ss   Sep17   0:33 /sbin/init splash
+root       412   0.1  0.3  18432  2816 ?        Ss   Sep17   1:02 /lib/systemd/systemd-journald
+postfix    874   0.0  0.2  62464  1920 ?        S    Sep17   0:04 pickup -l -t unix -u
+chrony     521   0.0  0.1  12288  1024 ?        S    Sep17   0:08 /usr/sbin/chronyd
+
+[Explanation] Processes using most CPU and RAM. Use to spot runaway tasks.
+----------------------------------------------
+[20:30:01] [Memory] free -h
+               total        used        free      shared  buff/cache   available
+Mem:           7.7Gi       4.1Gi       512Mi        88Mi       3.1Gi       3.2Gi
+Swap:          2.0Gi       156Mi       1.8Gi
+
+[Explanation] Total/used/available memory. Very low 'available' can cause swapping or slowdowns.
+----------------------------------------------
+[20:30:01] [Disk] Filesystems (df -hT)
+Filesystem     Type      Size  Used Avail Use% Mounted on
+/dev/sda1      ext4       40G   36G  1.8G  91% /
+/dev/sda2      ext4      100G   44G   51G  47% /data
+/dev/sdb1      ext4       20G  4.2G   15G  23% /backup
+
+[20:30:01] ALERT: / at 91% used (/dev/sda1)
+
+[Explanation] Disk usage by filesystem. Alerts if any mount exceeds 85%.
+----------------------------------------------
+[20:30:01] [Network] Interfaces
+lo               UNKNOWN        127.0.0.1/8 ::1/128
+eth0             UP             10.0.1.42/24 fe80::250:56ff:fe01:abcd/64
+
+[20:30:01] [Network] Routes
+default via 10.0.1.1 dev eth0 proto dhcp src 10.0.1.42 metric 100
+10.0.1.0/24 dev eth0 proto kernel scope link src 10.0.1.42
+169.254.0.0/16 dev eth0 scope link metric 1000
+
+[20:30:01] [Network] Open ports (top 15)
+Netid  State   Recv-Q  Send-Q  Local Address:Port   Peer Address:Port  Process
+tcp    LISTEN  0       128     0.0.0.0:22            0.0.0.0:*          users:(("sshd",pid=988,fd=3))
+tcp    LISTEN  0       511     0.0.0.0:80            0.0.0.0:*          users:(("nginx",pid=1101,fd=6))
+tcp    LISTEN  0       511     0.0.0.0:443           0.0.0.0:*          users:(("nginx",pid=1101,fd=8))
+tcp    LISTEN  0       70      127.0.0.1:3306        0.0.0.0:*          users:(("mysqld",pid=1204,fd=21))
+tcp    LISTEN  0       128     127.0.0.1:9000        0.0.0.0:*          users:(("php-fpm",pid=1842,fd=7))
+udp    UNCONN  0       0       0.0.0.0:68            0.0.0.0:*          users:(("dhclient",pid=612,fd=6))
+
+[Explanation] Interfaces, routing, and listening ports. Keep the open-port list minimal for security.
+----------------------------------------------
+[20:30:01] [Services] Running services (head)
+  UNIT                        LOAD   ACTIVE SUB     DESCRIPTION
+  cron.service                loaded active running Regular background program processing daemon
+  mysql.service               loaded active running MySQL Community Server
+  nginx.service               loaded active running A high performance web server
+  php8.1-fpm.service          loaded active running The PHP 8.1 FastCGI Process Manager
+  postfix.service             loaded active running Postfix Mail Transport Agent
+  ssh.service                 loaded active running OpenBSD Secure Shell server
+  systemd-journald.service    loaded active running Journal Service
+  systemd-timesyncd.service   loaded active running Network Time Synchronization
+  unattended-upgrades.service loaded active running Unattended Upgrades Shutdown
+
+[20:30:01] [Services] Failed services
+  fail2ban.service
+
+[Explanation] Active services and any failures. Failed units often explain app outages.
+----------------------------------------------
+[20:30:01] [Logs] Recent errors (journalctl -p 3)
+Sep 29 18:14:02 prod-web-01 kernel: EXT4-fs error (device sda1): ext4_find_entry:1455: inode #2: comm php-fpm: reading directory lblock 0
+Sep 29 19:22:11 prod-web-01 fail2ban[2241]: ERROR  Failed during configuration: Have not found any log file for sshd jail
+Sep 29 19:22:11 prod-web-01 systemd[1]: fail2ban.service: Control process exited with error code
+Sep 29 19:22:11 prod-web-01 systemd[1]: Failed to start Fail2Ban Service.
+Sep 29 20:01:03 prod-web-01 kernel: [UFW BLOCK] IN=eth0 OUT= MAC=... SRC=185.220.101.47 DST=10.0.1.42 PROTO=TCP DPT=8080
+Sep 29 20:14:57 prod-web-01 kernel: [UFW BLOCK] IN=eth0 OUT= MAC=... SRC=45.142.212.100 DST=10.0.1.42 PROTO=TCP DPT=23
+
+[20:30:01] [Logs] Tail /var/log/syslog (errors/warnings)
+Sep 29 19:22:11 prod-web-01 fail2ban[2241]: ERROR  Failed during configuration: Have not found any log file for sshd jail
+Sep 29 19:55:04 prod-web-01 mysqld[1204]: [Warning] InnoDB: page_cleaner: 1000ms intended loop took 4539ms
+Sep 29 20:11:22 prod-web-01 postfix/smtp[3341]: warning: hostname verification failed for 203.0.113.5
+Sep 29 20:15:30 prod-web-01 kernel: EXT4-fs warning (device sda1): ext4_dx_add_entry:2467: Directory index full!
+
+[Explanation] Recent system errors/warnings. Common harmless VM messages: floppy/CD I/O, SMBus notices.
+----------------------------------------------
+[20:30:01] [DNS] resolv.conf
+nameserver 10.0.1.1
+nameserver 8.8.8.8
+search example.internal
+
+[Explanation] DNS configuration. Missing nameserver lines can break name resolution.
+----------------------------------------------
+[20:30:01] [Time] timedatectl status
+               Local time: Mon 2025-09-29 20:30:01 UTC
+           Universal time: Mon 2025-09-29 20:30:01 UTC
+                 RTC time: Mon 2025-09-29 20:30:01
+                Time zone: UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no
+
+[Explanation] Time source and NTP sync. Accurate time is critical for auth/logs.
+----------------------------------------------
+[20:30:02] [Disk] Biggest paths under /var (top 10)
+148M    /var/cache
+312M    /var/lib/mysql
+1.2G    /var/log
+18G     /var/www
+
+[20:30:02] [Disk] Biggest logs in /var/log (top 10)
+4.0K    /var/log/auth.log
+8.0K    /var/log/kern.log
+12K     /var/log/dpkg.log
+44K     /var/log/nginx/access.log
+88K     /var/log/nginx/error.log
+212M    /var/log/mysql/error.log
+880M    /var/log/syslog
+
+[Explanation] Space hotspots under /var and /var/log. Useful when disks fill up.
+----------------------------------------------
+[20:30:02] [Disk] Files deleted but still held open by processes
+COMMAND   PID     USER   FD   TYPE DEVICE SIZE/OFF NLINK NAME
+mysqld   1204    mysql   15u  REG  8,1    357892096   0 /var/log/mysql/old-error.log (deleted)
+php-fpm  1842 www-data   22w  REG  8,1    125829120   0 /var/log/php8.1-fpm-old.log (deleted)
+
+[20:30:02] NOTE: Restarting the owning service releases the space.
+
+[Explanation] Deleted files still open keep consuming space until the process restarts.
+----------------------------------------------
+
+=== APPLY MODE: Performing safe remediations ===
+
+[20:30:02] [Fix] Restarting FAILED services
+[20:30:02]  -> fail2ban.service (logs last 30 lines)
+● fail2ban.service - Fail2Ban Service
+     Loaded: loaded (/lib/systemd/system/fail2ban.service; enabled)
+     Active: failed (Result: exit-code)
+Sep 29 19:22:11 prod-web-01 fail2ban[2241]: ERROR  Failed during configuration: Have not found any log file for sshd jail
+Sep 29 19:22:11 prod-web-01 systemd[1]: fail2ban.service: Control process exited with error code.
+
+  -- restarting fail2ban.service...
+
+● fail2ban.service - Fail2Ban Service
+     Loaded: loaded (/lib/systemd/system/fail2ban.service; enabled)
+     Active: active (running) since Mon 2025-09-29 20:30:03 UTC; 1s ago
+   Main PID: 3489 (fail2ban-server)
+      Tasks: 5 (limit: 4915)
+     CGroup: /system.slice/fail2ban.service
+             └─3489 /usr/bin/python3 /usr/bin/fail2ban-server -xf start
+
+----------------------------------------------
+[20:30:04] [Fix] Vacuuming systemd journals (200M OR 7d)
+Vacuuming done, freed 1.4 GiB of archived journals from /var/log/journal.
+Vacuuming done, freed 0B of archived journals from /var/log/journal.
+----------------------------------------------
+[20:30:05] [Fix] Forcing logrotate
+----------------------------------------------
+[20:30:05] [Fix] Truncating very large logs (>300MB) under /var/log
+[20:30:05]   - truncating /var/log/syslog (880M)
+----------------------------------------------
+[20:30:05] [Fix] Cleaning package caches
+----------------------------------------------
+[20:30:05] [Fix] Clearing old files in /tmp (>=7d)
+/tmp/php_upload_tmp_3a8f2c
+/tmp/sess_old_4d91bb
+----------------------------------------------
+[20:30:06] [Fix] Skipping aggressive restarts (use --aggressive)
+----------------------------------------------
+[20:30:06] [Verify] Re-check failed services
+  0 units listed.
+
+[20:30:06] [Verify] Disk usage after fixes
+Filesystem     Type      Size  Used Avail Use% Mounted on
+/dev/sda1      ext4       40G   34G  3.5G  83% /
+/dev/sda2      ext4      100G   44G   51G  47% /data
+/dev/sdb1      ext4       20G  4.2G   15G  23% /backup
+
+[20:30:06] [Verify] DNS test
+prod-web-01.example.internal  10.0.1.42
+
+[20:30:06] [Verify] Time sync
+NTPSynchronized=yes
+TimeUSec=Mon 2025-09-29 20:30:06 UTC
+----------------------------------------------
+[20:30:06] === Done. Apply mode completed at 2025-09-29T20:30:06Z ===
+
+============================================================
+[Final Summary - Plain English]
+- ✅ System load is normal (0.08).
+- ✅ Memory is healthy (3276MB available).
+- ✅ Disk usage is safe (Root 83% full).
+- ✅ No critical kernel I/O errors detected.
+- ✅ All systemd services are running normally.
+- ✅ System clock is synchronized via NTP.
+
+[Verdict] Overall system health looks stable unless flagged above.
+============================================================
