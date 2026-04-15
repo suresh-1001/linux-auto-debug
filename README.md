@@ -7,6 +7,7 @@ A portable Bash script built for real-world production servers. It detects the O
 Used to diagnose and stabilize Linux servers across cloud and on-prem environments in Bay Area SMB and enterprise settings.
 
 ![Linux Auto Debug](./image/linux-auto-debug.webp)
+
 ---
 
 ## Quick Run (Read-Only, No Install)
@@ -147,18 +148,18 @@ linux-auto-debug/
 
 ---
 
-## 👤 Author
-
-**Suresh Chand** — IT Consultant & Fractional IT Director, San Jose CA  
-20+ years in Linux systems administration, VMware, Azure, and SMB infrastructure.
-
----
-
 ## 🔗 Related
 
 - [linux-server-onboarding-baseline](https://github.com/suresh-1001/linux-server-onboarding-baseline) — harden a server before debugging it
 - [linux-cis-audit](https://github.com/suresh-1001/linux-cis-audit) — CIS Benchmark audit and remediation
 - [prometheus-grafana-stack](https://github.com/suresh-1001/prometheus-grafana-stack) — monitor the servers you just fixed
+
+---
+
+## 👤 Author
+
+**Suresh Chand** — IT Consultant & Fractional IT Director, San Jose CA
+20+ years in Linux systems administration, VMware, Azure, and SMB infrastructure.
 
 ---
 
